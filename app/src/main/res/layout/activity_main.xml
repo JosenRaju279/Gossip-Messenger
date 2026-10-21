@@ -1,0 +1,78 @@
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/main"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/mainpageds"
+    tools:context=".MainActivity">
+
+    <LinearLayout
+        android:id="@+id/Toolbar"
+        android:layout_width="match_parent"
+        android:layout_height="179dp"
+        android:layout_alignParentStart="true"
+        android:layout_alignParentTop="true"
+        android:layout_alignParentEnd="true"
+        android:layout_marginStart="0dp"
+        android:layout_marginTop="1dp"
+        android:layout_marginEnd="0dp"
+        android:layout_marginBottom="728dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingEnd="16dp">
+
+
+        <ImageView
+            android:id="@+id/imageView"
+            android:layout_width="155dp"
+            android:layout_height="184dp"
+            android:layout_marginStart="15dp"
+            android:layout_marginEnd="85dp"
+            android:layout_marginBottom="@dimen/_15sdp"
+            app:srcCompat="@drawable/mainlogo" />
+
+        <ImageView
+            android:id="@+id/logoutimg"
+            android:layout_width="72dp"
+            android:layout_height="67dp"
+            android:layout_marginStart="82dp"
+            android:layout_marginTop="25dp"
+            android:layout_marginEnd="50dp"
+            android:layout_marginBottom="50dp"
+            android:background="@drawable/exitbut" />
+    </LinearLayout>
+
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/mainuserrecyclerview"
+        android:layout_width="398dp"
+        android:layout_height="550dp"
+        android:layout_below="@+id/Toolbar"
+        android:layout_alignParentStart="true"
+        android:layout_alignParentTop="true"
+        android:layout_marginStart="10dp"
+        android:layout_marginTop="187dp"
+        android:layout_marginBottom="131dp" />
+
+    <ImageView
+        android:id="@+id/camBut"
+        android:layout_width="115dp"
+        android:layout_height="99dp"
+        android:layout_alignParentStart="true"
+        android:layout_alignParentBottom="true"
+        android:layout_marginStart="83dp"
+        android:layout_marginBottom="47dp"
+        android:src="@drawable/cam" />
+
+    <ImageView
+        android:id="@+id/settingbut"
+        android:layout_width="120dp"
+        android:layout_height="96dp"
+        android:layout_alignParentEnd="true"
+        android:layout_alignParentBottom="true"
+        android:layout_marginEnd="76dp"
+        android:layout_marginBottom="52dp"
+        android:src="@drawable/sett" />
+
+
+</RelativeLayout>

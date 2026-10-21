@@ -1,0 +1,50 @@
+{
+  "project_info": {
+    "project_number": "347315000343",
+    "firebase_url": "https://gossipstudios-default-rtdb.firebaseio.com",
+    "project_id": "gossipstudios",
+    "storage_bucket": "gossipstudios.firebasestorage.app"
+  },
+
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:347315000343:android:8e15121dc8a3bd4b1d3852",
+        "android_client_info": {
+          "package_name": "com.av.avmessenger"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCB-hi0NJ6UGcR_u4FVfD8nVUW8Syf0t2A"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:347315000343:android:37c864636cb0883a1d3852",
+        "android_client_info": {
+          "package_name": "com.example.gossipmessenger"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCB-hi0NJ6UGcR_u4FVfD8nVUW8Syf0t2A"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

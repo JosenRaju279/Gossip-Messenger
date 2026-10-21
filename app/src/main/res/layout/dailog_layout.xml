@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="325dp"
+    android:layout_height="@dimen/_234sdp"
+    android:orientation="vertical"
+    android:layout_gravity="center"
+    android:layout_margin="13dp"
+    android:background="@drawable/yesorno">
+
+
+    <ImageView
+        android:id="@+id/logoutlogclick"
+        android:layout_width="106dp"
+        android:layout_height="79dp"
+        android:layout_gravity="center"
+        android:layout_margin="13dp"
+        android:layout_marginTop="30dp"
+        android:src="@drawable/exitbut" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_marginTop="120dp"
+        android:layout_height="wrap_content"
+
+        android:orientation="horizontal">
+
+        <Button
+            android:id="@+id/Nobutton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_margin="16.90dp"
+            android:layout_weight="1"
+            android:backgroundTint="@color/lightbrown"
+            android:gravity="center"
+            android:text="No" />
+
+        <Button
+            android:id="@+id/Yesbutton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_margin="16.90dp"
+            android:layout_weight="1"
+            android:backgroundTint="@color/lightbrown"
+            android:gravity="center"
+            android:text="Yes" />
+
+
+    </LinearLayout>
+
+</LinearLayout>
