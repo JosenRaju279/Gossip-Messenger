@@ -4,6 +4,7 @@ import static com.example.gossipmessenger.ChatWIn.reciveriimg;
 import static com.example.gossipmessenger.ChatWIn.senderimg;
 
 import android.content.Context;
+import android.text.TextUtils;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -13,107 +14,139 @@ import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.auth.FirebaseUser;
 import com.squareup.picasso.Picasso;
 
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Date;
+import java.util.Locale;
 
 import de.hdodenhof.circleimageview.CircleImageView;
 
-public class messageaAdpater extends RecyclerView.Adapter {
+public class messageaAdpater extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
 
-    Context context;
-    ArrayList<msgmodelClass> messagesAdpaterArrayList;  // ArrayList to hold message objects
-    int ITEM_SEND = 1;  // Constant for sent messages
-    int ITEM_RECIVER = 2;  // Constant for received messages
+    private static final int ITEM_SEND = 1;
+    private static final int ITEM_RECEIVER = 2;
 
-    // Constructor to initialize context and message list
-    public messageaAdpater(Context context, ArrayList<msgmodelClass> messagesAdpaterArrayList) {
+    private final Context context;
+    private final ArrayList<msgmodelClass> messagesList;
+    private final SimpleDateFormat timeFormat;
+
+    public messageaAdpater(Context context, ArrayList<msgmodelClass> messagesList) {
         this.context = context;
-        this.messagesAdpaterArrayList = messagesAdpaterArrayList;
+        this.messagesList = messagesList != null ? messagesList : new ArrayList<>();
+        this.timeFormat = new SimpleDateFormat("hh:mm a", Locale.getDefault());
     }
 
     @NonNull
     @Override
     public RecyclerView.ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
-        // Inflate different layouts based on the message type (sent or received)
         if (viewType == ITEM_SEND) {
             View view = LayoutInflater.from(context).inflate(R.layout.sender_layout, parent, false);
-            return new senderViewHolder(view);  // Return sender view holder for sent messages
+            return new SenderViewHolder(view);
         } else {
             View view = LayoutInflater.from(context).inflate(R.layout.reciver_layout, parent, false);
-            return new reciverViewHolder(view);  // Return receiver view holder for received messages
+            return new ReceiverViewHolder(view);
         }
     }
 
     @Override
     public void onBindViewHolder(@NonNull RecyclerView.ViewHolder holder, int position) {
-        msgmodelClass messages = messagesAdpaterArrayList.get(position);  // Get message at current position
+        msgmodelClass message = messagesList.get(position);
+        if (message == null) {
+            return;
+        }
 
-        // If the message is sent by the current user
-        if (holder.getClass() == senderViewHolder.class) {
-            senderViewHolder viewHolder = (senderViewHolder) holder;
-            viewHolder.msgtext.setText(messages.getMessage());  // Set message text
+        String formattedTime = message.getTimeStamp() > 0 ? timeFormat.format(new Date(message.getTimeStamp())) : "";
 
-            // Check if sender image is available and load it using Picasso, else use default image
-            if (senderimg != null && !senderimg.isEmpty()) {
-                Picasso.get().load(senderimg).into(viewHolder.circleImageView);
+        if (holder instanceof SenderViewHolder) {
+            SenderViewHolder senderHolder = (SenderViewHolder) holder;
+            senderHolder.msgText.setText(message.getMessage());
+
+            if (!TextUtils.isEmpty(formattedTime)) {
+                senderHolder.timestamp.setText(formattedTime);
+                senderHolder.timestamp.setVisibility(View.VISIBLE);
             } else {
-                viewHolder.circleImageView.setImageResource(R.drawable.man);  // Default image
+                senderHolder.timestamp.setVisibility(View.GONE);
             }
 
-        } else {
-            // If the message is received
-            reciverViewHolder viewHolder = (reciverViewHolder) holder;
-            viewHolder.msgtext.setText(messages.getMessage());  // Set message text
-
-            // Check if receiver image is available and load it using Picasso, else use default image
-            if (reciveriimg != null && !reciveriimg.isEmpty()) {
-                Picasso.get().load(reciveriimg).into(viewHolder.circleImageView);
+            if (!TextUtils.isEmpty(senderimg)) {
+                Picasso.get()
+                        .load(senderimg)
+                        .placeholder(R.drawable.man)
+                        .error(R.drawable.man)
+                        .into(senderHolder.circleImageView);
             } else {
-                viewHolder.circleImageView.setImageResource(R.drawable.man);  // Default image
+                senderHolder.circleImageView.setImageResource(R.drawable.man);
+            }
+
+        } else if (holder instanceof ReceiverViewHolder) {
+            ReceiverViewHolder receiverHolder = (ReceiverViewHolder) holder;
+            receiverHolder.msgText.setText(message.getMessage());
+
+            if (!TextUtils.isEmpty(formattedTime)) {
+                receiverHolder.timestamp.setText(formattedTime);
+                receiverHolder.timestamp.setVisibility(View.VISIBLE);
+            } else {
+                receiverHolder.timestamp.setVisibility(View.GONE);
+            }
+
+            if (!TextUtils.isEmpty(reciveriimg)) {
+                Picasso.get()
+                        .load(reciveriimg)
+                        .placeholder(R.drawable.man)
+                        .error(R.drawable.man)
+                        .into(receiverHolder.circleImageView);
+            } else {
+                receiverHolder.circleImageView.setImageResource(R.drawable.man);
             }
         }
     }
 
     @Override
     public int getItemCount() {
-        return messagesAdpaterArrayList.size();  // Return total number of messages in the list
+        return messagesList.size();
     }
 
     @Override
     public int getItemViewType(int position) {
-        msgmodelClass messages = messagesAdpaterArrayList.get(position);  // Get message at current position
+        msgmodelClass message = messagesList.get(position);
+        if (message == null) {
+            return ITEM_RECEIVER;
+        }
 
-        // Check if the current message sender is the logged-in user or the receiver
-        if (FirebaseAuth.getInstance().getCurrentUser().getUid().equals(messages.getSenderid())) {
-            return ITEM_SEND;  // Return ITEM_SEND for sent messages
+        FirebaseUser currentUser = FirebaseAuth.getInstance().getCurrentUser();
+        if (currentUser != null && currentUser.getUid().equals(message.getSenderid())) {
+            return ITEM_SEND;
         } else {
-            return ITEM_RECIVER;  // Return ITEM_RECIVER for received messages
+            return ITEM_RECEIVER;
         }
     }
 
-    // View holder for sent messages
-    class senderViewHolder extends RecyclerView.ViewHolder {
-        CircleImageView circleImageView;  // Profile image of the sender
-        TextView msgtext;  // Message text of the sender
+    static class SenderViewHolder extends RecyclerView.ViewHolder {
+        CircleImageView circleImageView;
+        TextView msgText;
+        TextView timestamp;
 
-        public senderViewHolder(@NonNull View itemView) {
+        public SenderViewHolder(@NonNull View itemView) {
             super(itemView);
-            circleImageView = itemView.findViewById(R.id.profilerggg);  // Bind profile image view
-            msgtext = itemView.findViewById(R.id.msgsendertyp);  // Bind message text view
+            circleImageView = itemView.findViewById(R.id.profilerggg);
+            msgText = itemView.findViewById(R.id.msgsendertyp);
+            timestamp = itemView.findViewById(R.id.sender_timestamp);
         }
     }
 
-    // View holder for received messages
-    class reciverViewHolder extends RecyclerView.ViewHolder {
+    static class ReceiverViewHolder extends RecyclerView.ViewHolder {
+        CircleImageView circleImageView;
+        TextView msgText;
+        TextView timestamp;
 
-        CircleImageView circleImageView;  // Profile image of the receiver
-        TextView msgtext;  // Message text of the receiver
-
-        public reciverViewHolder(@NonNull View itemView) {
+        public ReceiverViewHolder(@NonNull View itemView) {
             super(itemView);
-            circleImageView = itemView.findViewById(R.id.pro);  // Bind profile image view
-            msgtext = itemView.findViewById(R.id.recivertextset);  // Bind message text view
+            circleImageView = itemView.findViewById(R.id.pro);
+            msgText = itemView.findViewById(R.id.recivertextset);
+            timestamp = itemView.findViewById(R.id.receiver_timestamp);
         }
     }
 }

@@ -3,17 +3,19 @@ package com.example.gossipmessenger;
 import android.app.Dialog;
 import android.content.Intent;
 import android.os.Bundle;
-import android.provider.MediaStore;
-import android.view.View;
 import android.widget.Button;
 import android.widget.ImageView;
+import android.widget.Toast;
 
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.database.DataSnapshot;
 import com.google.firebase.database.DatabaseError;
 import com.google.firebase.database.DatabaseReference;
@@ -24,117 +26,128 @@ import java.util.ArrayList;
 
 public class MainActivity extends AppCompatActivity {
 
-    FirebaseAuth auth;  // Firebase Authentication instance
-    RecyclerView mainuserrecyclerview;  // RecyclerView for displaying users
-    UserAdpter adapter;  // Adapter for RecyclerView
-    FirebaseDatabase database;  // Firebase Database instance
-    ArrayList<Users> userArrayList;  // ArrayList to hold users
-    ImageView imglogout;  // ImageView for logout button
-    ImageView cambut, setbut;  // ImageView for camera and settings buttons
+    private FirebaseAuth auth;
+    private FirebaseDatabase database;
+    private RecyclerView mainuserrecyclerview;
+    private UserAdpter adapter;
+    private ArrayList<Users> userArrayList;
+    private ImageView imglogout, cambut, setbut;
+    private ValueEventListener usersListener;
+    private DatabaseReference usersReference;
+
+    // Camera launcher
+    private final ActivityResultLauncher<Void> cameraLauncher =
+            registerForActivityResult(new ActivityResultContracts.TakePicturePreview(), bitmap -> {
+                if (bitmap != null) {
+                    Toast.makeText(MainActivity.this, "Photo captured!", Toast.LENGTH_SHORT).show();
+                }
+            });
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
+        // 1. First verify authentication
+        auth = FirebaseAuth.getInstance();
+        FirebaseUser currentUser = auth.getCurrentUser();
+        if (currentUser == null) {
+            Intent intent = new Intent(MainActivity.this, Login.class);
+            intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+            startActivity(intent);
+            finish();
+            return;
+        }
+
         setContentView(R.layout.activity_main);
 
-        // Initialize Firebase instances
-        database = FirebaseDatabase.getInstance();
-        auth = FirebaseAuth.getInstance();
+        // 2. Initialize UI components
+        cambut = findViewById(R.id.camBut);
+        setbut = findViewById(R.id.settingbut);
+        imglogout = findViewById(R.id.logoutimg);
+        mainuserrecyclerview = findViewById(R.id.mainuserrecyclerview);
 
-        // Initialize UI components
-        cambut = findViewById(R.id.camBut);  // Camera button
-        setbut = findViewById(R.id.settingbut);  // Settings button
-        imglogout = findViewById(R.id.logoutimg);  // Logout button
-
-        // Database reference to fetch user data
-        DatabaseReference reference = database.getReference().child("user");
-
-        // Initialize the ArrayList
+        // 3. Initialize RecyclerView and Adapter BEFORE attaching Firebase listener to prevent NPE
         userArrayList = new ArrayList<>();
+        mainuserrecyclerview.setLayoutManager(new LinearLayoutManager(this));
+        adapter = new UserAdpter(MainActivity.this, userArrayList);
+        mainuserrecyclerview.setAdapter(adapter);
 
-        // Fetch data from Firebase
-        reference.addValueEventListener(new ValueEventListener() {
+        // 4. Initialize Firebase Database listener
+        database = FirebaseDatabase.getInstance();
+        usersReference = database.getReference().child("user");
+
+        String currentUserId = currentUser.getUid();
+        usersListener = new ValueEventListener() {
             @Override
             public void onDataChange(@NonNull DataSnapshot snapshot) {
-                userArrayList.clear();  // Clear previous data before adding new ones
+                userArrayList.clear();
                 for (DataSnapshot dataSnapshot : snapshot.getChildren()) {
-                    Users users = dataSnapshot.getValue(Users.class);  // Convert snapshot to Users object
-                    if (users != null) {
-                        userArrayList.add(users);  // Add the user to the list
+                    Users user = dataSnapshot.getValue(Users.class);
+                    if (user != null) {
+                        // Ensure userId is populated
+                        if (user.getUserId() == null || user.getUserId().isEmpty()) {
+                            user.setUserId(dataSnapshot.getKey());
+                        }
+                        // Don't show the currently logged-in user in their own chat list
+                        if (!currentUserId.equals(user.getUserId())) {
+                            userArrayList.add(user);
+                        }
                     }
                 }
-                adapter.notifyDataSetChanged();  // Notify the adapter that data has changed
+                adapter.notifyDataSetChanged();
             }
 
             @Override
             public void onCancelled(@NonNull DatabaseError error) {
-                // Handle error if needed
+                Toast.makeText(MainActivity.this, "Failed to load users: " + error.getMessage(), Toast.LENGTH_SHORT).show();
             }
-        });
+        };
+        usersReference.addValueEventListener(usersListener);
 
-        // Handle logout button click
-        imglogout.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                // Show a dialog asking the user to confirm logout
-                Dialog dialog = new Dialog(MainActivity.this, R.style.dailoge);
-                dialog.setContentView(R.layout.dailog_layout);
-                Button no = dialog.findViewById(R.id.Nobutton);  // "No" button
-                Button yes = dialog.findViewById(R.id.Yesbutton);  // "Yes" button
+        // 5. Setup Action Handlers
+        // Logout Dialog
+        imglogout.setOnClickListener(v -> showLogoutDialog());
 
-                // If "Yes" is clicked, sign out and redirect to login screen
-                yes.setOnClickListener(new View.OnClickListener() {
-                    @Override
-                    public void onClick(View v) {
-                        FirebaseAuth.getInstance().signOut();  // Sign out from Firebase
-                        Intent intent = new Intent(MainActivity.this, Login.class);  // Redirect to Login activity
-                        startActivity(intent);
-                    }
-                });
-
-                // If "No" is clicked, dismiss the dialog
-                no.setOnClickListener(new View.OnClickListener() {
-                    @Override
-                    public void onClick(View v) {
-                        dialog.dismiss();
-                    }
-                });
-
-                // Show the dialog
-                dialog.show();
-            }
-        });
-
-        // Handle settings button click
-        setbut.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                // Redirect to the Settings activity
-                Intent intent = new Intent(MainActivity.this, Setting.class);
-                startActivity(intent);
-            }
-        });
-
-        // Handle camera button click
-        cambut.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                // Open the camera to take a picture
-                Intent intent = new Intent(android.provider.MediaStore.ACTION_IMAGE_CAPTURE);
-                startActivityForResult(intent, 10);  // Start the camera activity
-            }
-        });
-
-        // Initialize RecyclerView and adapter
-        mainuserrecyclerview = findViewById(R.id.mainuserrecyclerview);
-        mainuserrecyclerview.setLayoutManager(new LinearLayoutManager(this));  // Set a LinearLayoutManager for RecyclerView
-        adapter = new UserAdpter(MainActivity.this, userArrayList);  // Initialize the adapter
-        mainuserrecyclerview.setAdapter(adapter);  // Set the adapter to RecyclerView
-
-        // If the user is not authenticated, redirect to the Login activity
-        if (auth.getCurrentUser() == null) {
-            Intent intent = new Intent(MainActivity.this, Login.class);
+        // Settings Button
+        setbut.setOnClickListener(v -> {
+            Intent intent = new Intent(MainActivity.this, Setting.class);
             startActivity(intent);
+        });
+
+        // Camera Button
+        cambut.setOnClickListener(v -> {
+            try {
+                cameraLauncher.launch(null);
+            } catch (Exception e) {
+                Toast.makeText(MainActivity.this, "Camera not available: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+            }
+        });
+    }
+
+    private void showLogoutDialog() {
+        Dialog dialog = new Dialog(MainActivity.this, R.style.dailoge);
+        dialog.setContentView(R.layout.dailog_layout);
+        Button no = dialog.findViewById(R.id.Nobutton);
+        Button yes = dialog.findViewById(R.id.Yesbutton);
+
+        yes.setOnClickListener(v -> {
+            dialog.dismiss();
+            auth.signOut();
+            Intent intent = new Intent(MainActivity.this, Login.class);
+            intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+            startActivity(intent);
+            finish();
+        });
+
+        no.setOnClickListener(v -> dialog.dismiss());
+        dialog.show();
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        if (usersReference != null && usersListener != null) {
+            usersReference.removeEventListener(usersListener);
         }
     }
 }
