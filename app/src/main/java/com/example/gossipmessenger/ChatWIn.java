@@ -1,9 +1,10 @@
 package com.example.gossipmessenger;
 
 import android.os.Bundle;
+import android.text.TextUtils;
 import android.util.Log;
-import android.view.View;
 import android.widget.EditText;
+import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -13,8 +14,6 @@ import androidx.cardview.widget.CardView;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
-import com.google.android.gms.tasks.OnCompleteListener;
-import com.google.android.gms.tasks.Task;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.database.DataSnapshot;
 import com.google.firebase.database.DatabaseError;
@@ -30,155 +29,190 @@ import de.hdodenhof.circleimageview.CircleImageView;
 
 public class ChatWIn extends AppCompatActivity {
 
-    // Declare variables for receiver details and Firebase references
-    String reviverimg, reciverUid, reciverName, SenderUID;
-    CircleImageView profile;
-    TextView reciverNname;
-    CardView sendbtn;
-    EditText writemsg;
-    FirebaseAuth firebaseAuth;
-    FirebaseDatabase database;
-    public static String senderimg;
-    public static String reciveriimg;
-    String senderRoom, reciverRoom;
-    RecyclerView messadapters;
-    ArrayList<msgmodelClass> messagessArrayList;
-    messageaAdpater mmessageadapter;
+    private static final String TAG = "ChatWIn";
+
+    public static String senderimg = "";
+    public static String reciveriimg = "";
+
+    private String reviverimg, reciverUid, reciverName, senderUID;
+    private CircleImageView profile;
+    private TextView receiverNameView;
+    private CardView sendbtn;
+    private EditText writemsg;
+    private ImageView backButton;
+
+    private FirebaseAuth firebaseAuth;
+    private FirebaseDatabase database;
+    private String senderRoom, reciverRoom;
+    private RecyclerView messadapters;
+    private ArrayList<msgmodelClass> messagessArrayList;
+    private messageaAdpater mmessageadapter;
+
+    private DatabaseReference chatReference;
+    private ValueEventListener chatListener;
+    private DatabaseReference senderProfileRef;
+    private ValueEventListener senderProfileListener;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_chat_win);
 
-        // Initialize Firebase Auth and Database instances
-        firebaseAuth = FirebaseAuth.getInstance();
-        database = FirebaseDatabase.getInstance();
-
-        // Set up RecyclerView for displaying messages
-        messadapters = findViewById(R.id.messadapter);
-        LinearLayoutManager linearLayoutManager = new LinearLayoutManager(this);
-        linearLayoutManager.setStackFromEnd(true); // Scroll messages to the bottom
-        messadapters.setLayoutManager(linearLayoutManager);
-
-        // Initialize message list and adapter for RecyclerView
-        messagessArrayList = new ArrayList<>();
-        mmessageadapter = new messageaAdpater(ChatWIn.this, messagessArrayList);
-        messadapters.setAdapter(mmessageadapter);
-
         // Retrieve receiver details from Intent
         reciverName = getIntent().getStringExtra("nameee");
         reviverimg = getIntent().getStringExtra("reciverimage");
         reciverUid = getIntent().getStringExtra("uid");
 
-        // Check if received data is valid; show error if not
-        if (reciverName == null || reviverimg == null || reciverUid == null) {
-            Log.e("ChatWIn", "Received invalid intent extras");
-            Toast.makeText(this, "Error loading chat", Toast.LENGTH_SHORT).show();
+        // Validate essential receiver data
+        if (TextUtils.isEmpty(reciverUid)) {
+            Log.e(TAG, "Receiver UID is missing");
+            Toast.makeText(this, "Error loading chat: invalid user", Toast.LENGTH_SHORT).show();
+            finish();
             return;
         }
 
-        // Initialize UI components for sending messages
+        if (TextUtils.isEmpty(reciverName)) {
+            reciverName = "User";
+        }
+
+        // Initialize Firebase
+        firebaseAuth = FirebaseAuth.getInstance();
+        database = FirebaseDatabase.getInstance();
+
+        if (firebaseAuth.getCurrentUser() == null) {
+            Toast.makeText(this, "User not authenticated", Toast.LENGTH_SHORT).show();
+            finish();
+            return;
+        }
+
+        senderUID = firebaseAuth.getCurrentUser().getUid();
+
+        // Set up unique rooms for 1-on-1 chat
+        senderRoom = senderUID + reciverUid;
+        reciverRoom = reciverUid + senderUID;
+
+        // Cache receiver image URL for adapter
+        reciveriimg = reviverimg != null ? reviverimg : "";
+
+        // Bind UI components
+        backButton = findViewById(R.id.backButton);
         sendbtn = findViewById(R.id.sendbutton);
         writemsg = findViewById(R.id.writemessage);
         profile = findViewById(R.id.profilechat);
-        reciverNname = findViewById(R.id.Recivername);
+        receiverNameView = findViewById(R.id.Recivername);
+        messadapters = findViewById(R.id.messadapter);
 
-        // Load receiver's profile image using Picasso library
-        if (reviverimg != null && !reviverimg.isEmpty()) {
-            Picasso.get().load(reviverimg).into(profile);
+        // Back button navigation
+        if (backButton != null) {
+            backButton.setOnClickListener(v -> finish());
+        }
+
+        // Set receiver name
+        receiverNameView.setText(reciverName);
+
+        // Load receiver profile image
+        if (!TextUtils.isEmpty(reviverimg)) {
+            Picasso.get()
+                    .load(reviverimg)
+                    .placeholder(R.drawable.man)
+                    .error(R.drawable.man)
+                    .into(profile);
         } else {
-            // Load default profile image if the URL is invalid
-            profile.setImageResource(R.drawable.man); // Ensure this image exists in res/drawable
+            profile.setImageResource(R.drawable.man);
         }
 
-        // Set the receiver's name on the screen
-        reciverNname.setText(reciverName);
+        // Setup RecyclerView
+        LinearLayoutManager linearLayoutManager = new LinearLayoutManager(this);
+        linearLayoutManager.setStackFromEnd(true);
+        messadapters.setLayoutManager(linearLayoutManager);
 
-        // Get the current user's UID (SenderUID) from Firebase Authentication
-        SenderUID = firebaseAuth.getUid();
-        if (SenderUID == null) {
-            Log.e("ChatWIn", "Sender UID is null");
-            Toast.makeText(this, "User not authenticated", Toast.LENGTH_SHORT).show();
-            return;
-        }
+        messagessArrayList = new ArrayList<>();
+        mmessageadapter = new messageaAdpater(ChatWIn.this, messagessArrayList);
+        messadapters.setAdapter(mmessageadapter);
 
-        // Set up unique rooms for sender and receiver based on their UIDs
-        senderRoom = SenderUID + reciverUid;
-        reciverRoom = reciverUid + SenderUID;
-
-        // Reference to the user's profile in the database
-        DatabaseReference reference = database.getReference().child("users").child(SenderUID);
-        DatabaseReference chatreference = database.getReference().child("chats").child(senderRoom).child("messages");
-
-        // Retrieve existing messages for the chat
-        chatreference.addValueEventListener(new ValueEventListener() {
-            @Override
-            public void onDataChange(@NonNull DataSnapshot snapshot) {
-                messagessArrayList.clear(); // Clear old messages before displaying new ones
-                for (DataSnapshot dataSnapshot : snapshot.getChildren()) {
-                    msgmodelClass messages = dataSnapshot.getValue(msgmodelClass.class); // Get message object
-                    if (messages != null) {
-                        messagessArrayList.add(messages); // Add message to the list
-                    } else {
-                        Log.w("ChatWIn", "Message is null, skipping.");
-                    }
-                }
-                mmessageadapter.notifyDataSetChanged(); // Notify adapter to update UI
-            }
-
-            @Override
-            public void onCancelled(@NonNull DatabaseError error) {
-                Log.e("ChatWIn", "Failed to read messages: " + error.getMessage());
-            }
-        });
-
-        // Retrieve sender's profile image
-        reference.addValueEventListener(new ValueEventListener() {
+        // Load sender profile picture from "user" node (fixed path mismatch from "users")
+        senderProfileRef = database.getReference().child("user").child(senderUID);
+        senderProfileListener = new ValueEventListener() {
             @Override
             public void onDataChange(@NonNull DataSnapshot snapshot) {
                 if (snapshot.exists() && snapshot.child("profilepic").getValue() != null) {
-                    senderimg = snapshot.child("profilepic").getValue().toString(); // Get sender's profile image URL
-                    reciveriimg = reviverimg; // Set receiver's image URL
-                } else {
-                    Log.w("ChatWIn", "Profile picture not found for sender.");
+                    senderimg = String.valueOf(snapshot.child("profilepic").getValue());
+                    mmessageadapter.notifyDataSetChanged();
                 }
             }
 
             @Override
             public void onCancelled(@NonNull DatabaseError error) {
-                Log.e("ChatWIn", "Failed to retrieve sender's profile picture: " + error.getMessage());
+                Log.w(TAG, "Failed to load sender profile picture: " + error.getMessage());
             }
-        });
+        };
+        senderProfileRef.addValueEventListener(senderProfileListener);
 
-        // Send message logic when send button is clickedv
-        sendbtn.setOnClickListener(v -> {
-            String message = writemsg.getText().toString(); // Get the message input from user
-            if (message.isEmpty()) {
-                Toast.makeText(ChatWIn.this, "Enter the Message to send", Toast.LENGTH_SHORT).show();
-                return;
+        // Listen for messages in this chat room
+        chatReference = database.getReference().child("chats").child(senderRoom).child("messages");
+        chatListener = new ValueEventListener() {
+            @Override
+            public void onDataChange(@NonNull DataSnapshot snapshot) {
+                messagessArrayList.clear();
+                for (DataSnapshot dataSnapshot : snapshot.getChildren()) {
+                    msgmodelClass message = dataSnapshot.getValue(msgmodelClass.class);
+                    if (message != null) {
+                        messagessArrayList.add(message);
+                    }
+                }
+                mmessageadapter.notifyDataSetChanged();
+                if (!messagessArrayList.isEmpty()) {
+                    messadapters.scrollToPosition(messagessArrayList.size() - 1);
+                }
             }
-            writemsg.setText(""); // Clear message input field
-            Date date = new Date(); // Get current date and time
 
-            // Create a message object with sender UID, message text, and timestamp
-            msgmodelClass messagess = new msgmodelClass(SenderUID, message, date.getTime());
-
-            // Ensure Firebase Database instance is not null
-            if (database == null) {
-                Log.e("Firebase", "FirebaseDatabase instance is null");
-                return;
+            @Override
+            public void onCancelled(@NonNull DatabaseError error) {
+                Log.e(TAG, "Failed to read messages: " + error.getMessage());
             }
+        };
+        chatReference.addValueEventListener(chatListener);
 
-            // Send message to both sender's and receiver's chat rooms in Firebase
-            database.getReference().child("chats").child(senderRoom).child("messages").push().setValue(messagess)
-                    .addOnCompleteListener(task -> {
-                        if (task.isSuccessful()) {
-                            // Send the same message to the receiver's chat room
-                            database.getReference().child("chats").child(reciverRoom).child("messages").push().setValue(messagess);
-                        } else {
-                            Log.e("ChatWIn", "Failed to send message: " + task.getException());
-                        }
-                    });
-        });
+        // Send message handler
+        sendbtn.setOnClickListener(v -> sendMessage());
+    }
+
+    private void sendMessage() {
+        String messageText = writemsg.getText().toString().trim();
+        if (TextUtils.isEmpty(messageText)) {
+            return;
+        }
+
+        writemsg.setText("");
+        long currentTime = new Date().getTime();
+
+        msgmodelClass newMessage = new msgmodelClass(senderUID, messageText, currentTime);
+
+        // Push to sender's room
+        database.getReference().child("chats").child(senderRoom).child("messages")
+                .push()
+                .setValue(newMessage)
+                .addOnCompleteListener(task -> {
+                    if (task.isSuccessful()) {
+                        // Push to receiver's room as well
+                        database.getReference().child("chats").child(reciverRoom).child("messages")
+                                .push()
+                                .setValue(newMessage);
+                    } else {
+                        Log.e(TAG, "Failed to send message: " + task.getException());
+                        Toast.makeText(ChatWIn.this, "Failed to send message", Toast.LENGTH_SHORT).show();
+                    }
+                });
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        if (chatReference != null && chatListener != null) {
+            chatReference.removeEventListener(chatListener);
+        }
+        if (senderProfileRef != null && senderProfileListener != null) {
+            senderProfileRef.removeEventListener(senderProfileListener);
+        }
     }
 }
