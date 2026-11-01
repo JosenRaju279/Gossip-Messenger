@@ -1,23 +1,26 @@
 package com.example.gossipmessenger;
 
-import android.app.ProgressDialog;
+import android.app.Dialog;
 import android.content.Intent;
+import android.graphics.Color;
+import android.graphics.drawable.ColorDrawable;
 import android.net.Uri;
 import android.os.Bundle;
 import android.text.TextUtils;
+import android.util.Patterns;
+import android.view.LayoutInflater;
 import android.view.View;
+import android.view.Window;
 import android.widget.Button;
-import android.widget.EditText;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.appcompat.app.AppCompatActivity;
 
-import com.google.android.gms.tasks.OnCompleteListener;
-import com.google.android.gms.tasks.OnSuccessListener;
-import com.google.android.gms.tasks.Task;
+import com.google.android.material.textfield.TextInputEditText;
+import com.google.android.material.textfield.TextInputLayout;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseAuthUserCollisionException;
 import com.google.firebase.database.DatabaseReference;
@@ -29,161 +32,234 @@ import de.hdodenhof.circleimageview.CircleImageView;
 
 public class Registration extends AppCompatActivity {
 
-    // UI components
-    TextView loginbut;
-    EditText rg_username, rg_email, rg_password, rg_repassword;
-    Button rg_signup;
-    CircleImageView rg_profileImg;
-    FirebaseAuth auth;
-    Uri imageURI;
-    String imageuri;
-    String emailPattern = "[a-zA-Z0-9._-]+@[a-z]+\\.+[a-z]+";
-    FirebaseDatabase database;
-    FirebaseStorage storage;
-    ProgressDialog progressDialog;
-    String defaultImageUrl = "https://example.com/default_profile_image.jpg"; // Default image URL
+    private TextView loginRedirect, tapToChange;
+    private TextInputLayout usernameLayout, emailLayout, passwordLayout, confirmPasswordLayout;
+    private TextInputEditText rgUsername, rgEmail, rgPassword, rgRePassword;
+    private Button rgSignup;
+    private CircleImageView rgProfileImg;
+
+    private FirebaseAuth auth;
+    private FirebaseDatabase database;
+    private FirebaseStorage storage;
+    private Uri selectedImageUri = null;
+    private Dialog loadingDialog;
+    private TextView loadingDialogText;
+
+    private final ActivityResultLauncher<String> imagePickerLauncher =
+            registerForActivityResult(new ActivityResultContracts.GetContent(), uri -> {
+                if (uri != null) {
+                    selectedImageUri = uri;
+                    rgProfileImg.setImageURI(uri);
+                }
+            });
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_registration);
 
-        // Initialize the ProgressDialog to show while registering
-        progressDialog = new ProgressDialog(this);
-        progressDialog.setMessage("Establishing The Account");
-        progressDialog.setCancelable(false);
-
-        // Hide the action bar for a cleaner UI
         if (getSupportActionBar() != null) {
             getSupportActionBar().hide();
         }
 
-        // Initialize Firebase components
-        database = FirebaseDatabase.getInstance();
-        storage = FirebaseStorage.getInstance();
-        auth = FirebaseAuth.getInstance();
+        try {
+            auth = FirebaseAuth.getInstance();
+            database = FirebaseDatabase.getInstance();
+            storage = FirebaseStorage.getInstance();
+        } catch (Exception e) {
+            Toast.makeText(this, "Firebase error: " + e.getMessage(), Toast.LENGTH_LONG).show();
+        }
 
-        // Bind UI components with their respective views
-        loginbut = findViewById(R.id.RgLogin);
-        rg_username = findViewById(R.id.RgUsername);
-        rg_email = findViewById(R.id.RgEmail);
-        rg_password = findViewById(R.id.RgPassword);
-        rg_repassword = findViewById(R.id.RgRePassword);
-        rg_profileImg = findViewById(R.id.RgProfilepic);
-        rg_signup = findViewById(R.id.RgSignup);
+        // Bind views
+        loginRedirect = findViewById(R.id.RgLogin);
+        tapToChange = findViewById(R.id.tapToChange);
+        usernameLayout = findViewById(R.id.usernameLayout);
+        emailLayout = findViewById(R.id.emailRegLayout);
+        passwordLayout = findViewById(R.id.passwordRegLayout);
+        confirmPasswordLayout = findViewById(R.id.confirmPasswordLayout);
+        rgUsername = findViewById(R.id.RgUsername);
+        rgEmail = findViewById(R.id.RgEmail);
+        rgPassword = findViewById(R.id.RgPassword);
+        rgRePassword = findViewById(R.id.RgRePassword);
+        rgProfileImg = findViewById(R.id.RgProfilepic);
+        rgSignup = findViewById(R.id.RgSignup);
 
-        // Redirect to the login screen when "Login" text is clicked
-        loginbut.setOnClickListener(v -> {
-            Intent intent = new Intent(Registration.this, Login.class);
-            startActivity(intent);
-            finish();
-        });
+        setupLoadingDialog();
 
-        // Handle user registration when "Sign Up" button is clicked
-        rg_signup.setOnClickListener(v -> {
-            String name = rg_username.getText().toString();
-            String email = rg_email.getText().toString();
-            String password = rg_password.getText().toString();
-            String confirmPassword = rg_repassword.getText().toString();
-            String status = "Hey I'm Using This Application";
+        // Click listeners for picking profile image
+        View.OnClickListener pickImageListener = v -> imagePickerLauncher.launch("image/*");
+        if (rgProfileImg != null) rgProfileImg.setOnClickListener(pickImageListener);
+        if (tapToChange != null) tapToChange.setOnClickListener(pickImageListener);
 
-            // Validation checks for empty fields
-            if (TextUtils.isEmpty(name) || TextUtils.isEmpty(email) ||
-                    TextUtils.isEmpty(password) || TextUtils.isEmpty(confirmPassword)) {
-                Toast.makeText(Registration.this, "Please Enter Valid Information", Toast.LENGTH_SHORT).show();
+        // Redirect to Login screen
+        if (loginRedirect != null) {
+            loginRedirect.setOnClickListener(v -> {
+                Intent intent = new Intent(Registration.this, Login.class);
+                startActivity(intent);
+                finish();
+            });
+        }
+
+        // Signup button click listener
+        if (rgSignup != null) {
+            rgSignup.setOnClickListener(v -> handleRegistration());
+        }
+    }
+
+    private void setupLoadingDialog() {
+        try {
+            loadingDialog = new Dialog(this);
+            loadingDialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
+            View dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_loading, null);
+            loadingDialog.setContentView(dialogView);
+            if (loadingDialog.getWindow() != null) {
+                loadingDialog.getWindow().setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
             }
-            // Check if the email format is valid
-            else if (!email.matches(emailPattern)) {
-                rg_email.setError("Type A Valid Email Here");
-            }
-            // Check if the password length is less than 6
-            else if (password.length() < 6) {
-                rg_password.setError("Password Must Be 6 Characters Or More");
-            }
-            // Check if passwords match
-            else if (!password.equals(confirmPassword)) {
-                rg_password.setError("The Password Doesn't Match");
-            } else {
-                progressDialog.show();
-                // Create user with email and password using FirebaseAuth
-                auth.createUserWithEmailAndPassword(email, password).addOnCompleteListener(task -> {
-                    if (task.isSuccessful()) {
-                        String id = task.getResult().getUser().getUid();
-                        DatabaseReference reference = database.getReference().child("user").child(id);
-                        StorageReference storageReference = storage.getReference().child("Upload").child(id);
+            loadingDialog.setCancelable(false);
+            loadingDialogText = dialogView.findViewById(R.id.dialogLoadingText);
+        } catch (Exception e) {
+            loadingDialog = null;
+        }
+    }
 
-                        // If an image is selected, upload it to Firebase Storage
-                        if (imageURI != null) {
-                            storageReference.putFile(imageURI).addOnCompleteListener(task1 -> {
-                                if (task1.isSuccessful()) {
-                                    // Once uploaded, get the image URL and store user data
-                                    storageReference.getDownloadUrl().addOnSuccessListener(uri -> {
-                                        imageuri = uri.toString();
-                                        Users user = new Users(imageuri, email, name, password, id, status);
-                                        reference.setValue(user).addOnCompleteListener(task2 -> {
-                                            progressDialog.dismiss();
-                                            if (task2.isSuccessful()) {
-                                                // Redirect to MainActivity after successful registration
-                                                Intent intent = new Intent(Registration.this, MainActivity.class);
-                                                startActivity(intent);
-                                                finish();
-                                            } else {
-                                                Toast.makeText(Registration.this, "Error in creating the user", Toast.LENGTH_SHORT).show();
-                                            }
-                                        });
-                                    });
-                                }
-                            });
-                        } else {
-                            // If no image is selected, use the default image URL
-                            Users user = new Users(defaultImageUrl, email, name, password, id, status);
-                            reference.setValue(user).addOnCompleteListener(task2 -> {
-                                progressDialog.dismiss();
-                                if (task2.isSuccessful()) {
-                                    // Redirect to MainActivity after successful registration
-                                    Intent intent = new Intent(Registration.this, MainActivity.class);
-                                    startActivity(intent);
-                                    finish();
-                                } else {
-                                    Toast.makeText(Registration.this, "Error in creating the user", Toast.LENGTH_SHORT).show();
-                                }
-                            });
-                        }
+    private void showLoading(String message) {
+        if (!isFinishing() && !isDestroyed()) {
+            if (loadingDialog != null) {
+                if (loadingDialogText != null && message != null) {
+                    loadingDialogText.setText(message);
+                }
+                if (!loadingDialog.isShowing()) {
+                    loadingDialog.show();
+                }
+            }
+        }
+    }
+
+    private void hideLoading() {
+        if (loadingDialog != null && loadingDialog.isShowing()) {
+            try {
+                loadingDialog.dismiss();
+            } catch (Exception ignored) {}
+        }
+    }
+
+    private void handleRegistration() {
+        String name = rgUsername.getText() != null ? rgUsername.getText().toString().trim() : "";
+        String email = rgEmail.getText() != null ? rgEmail.getText().toString().trim() : "";
+        String password = rgPassword.getText() != null ? rgPassword.getText().toString().trim() : "";
+        String confirmPassword = rgRePassword.getText() != null ? rgRePassword.getText().toString().trim() : "";
+        String status = "Hey I'm Using Gossip Messenger";
+
+        usernameLayout.setError(null);
+        emailLayout.setError(null);
+        passwordLayout.setError(null);
+        confirmPasswordLayout.setError(null);
+
+        if (TextUtils.isEmpty(name)) {
+            usernameLayout.setError("Username is required");
+            rgUsername.requestFocus();
+            return;
+        }
+
+        if (TextUtils.isEmpty(email)) {
+            emailLayout.setError("Email is required");
+            rgEmail.requestFocus();
+            return;
+        }
+
+        if (!Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
+            emailLayout.setError("Enter a valid email address");
+            rgEmail.requestFocus();
+            return;
+        }
+
+        if (TextUtils.isEmpty(password)) {
+            passwordLayout.setError("Password is required");
+            rgPassword.requestFocus();
+            return;
+        }
+
+        if (password.length() < 6) {
+            passwordLayout.setError("Password must be at least 6 characters");
+            rgPassword.requestFocus();
+            return;
+        }
+
+        if (!password.equals(confirmPassword)) {
+            confirmPasswordLayout.setError("Passwords do not match");
+            rgRePassword.requestFocus();
+            return;
+        }
+
+        if (auth == null || database == null) {
+            Toast.makeText(this, "Firebase services unavailable", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        showLoading("Creating account...");
+
+        auth.createUserWithEmailAndPassword(email, password).addOnCompleteListener(task -> {
+            if (!task.isSuccessful()) {
+                hideLoading();
+                if (task.getException() instanceof FirebaseAuthUserCollisionException) {
+                    emailLayout.setError("This email is already registered");
+                } else {
+                    String msg = task.getException() != null ? task.getException().getMessage() : "Registration failed";
+                    Toast.makeText(Registration.this, msg, Toast.LENGTH_LONG).show();
+                }
+                return;
+            }
+
+            if (auth.getCurrentUser() == null) {
+                hideLoading();
+                Toast.makeText(Registration.this, "Authentication error", Toast.LENGTH_SHORT).show();
+                return;
+            }
+
+            String userId = auth.getCurrentUser().getUid();
+            DatabaseReference userRef = database.getReference().child("user").child(userId);
+            StorageReference storageRef = storage != null ? storage.getReference().child("Upload").child(userId) : null;
+
+            if (selectedImageUri != null && storageRef != null) {
+                storageRef.putFile(selectedImageUri).addOnCompleteListener(uploadTask -> {
+                    if (uploadTask.isSuccessful()) {
+                        storageRef.getDownloadUrl().addOnSuccessListener(uri -> {
+                            saveUserToDatabase(userRef, userId, name, email, uri.toString(), status);
+                        }).addOnFailureListener(e -> {
+                            saveUserToDatabase(userRef, userId, name, email, "", status);
+                        });
                     } else {
-                        progressDialog.dismiss();
-                        // Handle email collision (email already in use)
-                        if (task.getException() instanceof FirebaseAuthUserCollisionException) {
-                            Toast.makeText(Registration.this, "Email is already in use", Toast.LENGTH_SHORT).show();
-                        } else {
-                            // Handle other errors
-                            Toast.makeText(Registration.this, "Error while creating. " + task.getException().getMessage(), Toast.LENGTH_SHORT).show();
-                        }
+                        saveUserToDatabase(userRef, userId, name, email, "", status);
                     }
                 });
+            } else {
+                saveUserToDatabase(userRef, userId, name, email, "", status);
             }
         });
+    }
 
-        // Open image picker when the profile image is clicked
-        rg_profileImg.setOnClickListener(v -> {
-            Intent intent = new Intent();
-            intent.setType("image/*");
-            intent.setAction(Intent.ACTION_GET_CONTENT);
-            startActivityForResult(Intent.createChooser(intent, "Select Picture"), 10);
+    private void saveUserToDatabase(DatabaseReference userRef, String userId, String name, String email, String profilePic, String status) {
+        Users newUser = new Users(userId, name, email, profilePic, status);
+
+        userRef.setValue(newUser).addOnCompleteListener(task -> {
+            hideLoading();
+            if (task.isSuccessful()) {
+                Toast.makeText(Registration.this, "Account created successfully!", Toast.LENGTH_SHORT).show();
+                Intent intent = new Intent(Registration.this, MainActivity.class);
+                intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+                startActivity(intent);
+                finish();
+            } else {
+                String error = task.getException() != null ? task.getException().getMessage() : "Failed to save profile";
+                Toast.makeText(Registration.this, error, Toast.LENGTH_LONG).show();
+            }
         });
     }
 
     @Override
-    protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
-        super.onActivityResult(requestCode, resultCode, data);
-        // If the request code is 10, then handle the selected image
-        if (requestCode == 10 && data != null) {
-            imageURI = data.getData();
-            rg_profileImg.setImageURI(imageURI);
-        }
-        // If no image is selected, set the default image
-        else if (requestCode == 10 && data == null) {
-            imageURI = Uri.parse("android.resource://" + getPackageName() + "/" + R.drawable.man); // Default image in drawable
-            rg_profileImg.setImageURI(imageURI);
-        }
+    protected void onDestroy() {
+        super.onDestroy();
+        hideLoading();
+        loadingDialog = null;
     }
 }

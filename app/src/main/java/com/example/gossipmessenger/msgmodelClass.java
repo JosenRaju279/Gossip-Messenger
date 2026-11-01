@@ -1,11 +1,15 @@
 package com.example.gossipmessenger;
 
+import com.google.firebase.database.IgnoreExtraProperties;
+
+@IgnoreExtraProperties
 public class msgmodelClass {
-    String message;
-    String senderid;
-    long timeStamp;
+    private String message;
+    private String senderid;
+    private long timeStamp;
 
     public msgmodelClass() {
+        // Required empty constructor for Firebase
     }
 
     public msgmodelClass(String senderid, String message, long timeStamp) {
@@ -15,7 +19,7 @@ public class msgmodelClass {
     }
 
     public String getMessage() {
-        return message;
+        return message != null ? message : "";
     }
 
     public void setMessage(String message) {
@@ -23,7 +27,7 @@ public class msgmodelClass {
     }
 
     public String getSenderid() {
-        return senderid;
+        return senderid != null ? senderid : "";
     }
 
     public void setSenderid(String senderid) {
